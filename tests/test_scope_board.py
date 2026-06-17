@@ -637,8 +637,9 @@ def test_qa_role_workload_includes_done_status_with_sp_test():
         [{"id": "core", "name": "Plan", "kind": "planned", "order": 0, "issues": [issue]}],
         "2026-06",
     )
-    assert metrics["plan_by_role"]["qa"][0]["developer"] == "Егор Бухтояров"
-    assert metrics["plan_role_coverage"]["qa"]["total"] == 1
+    assert metrics["plan_by_role"]["qa"] == []
+    assert metrics["plan_by_role_sprint"]["qa"][0]["developer"] == "Егор Бухтояров"
+    assert metrics["plan_role_coverage_sprint"]["qa"]["total"] == 1
 
 
 def test_qa_role_workload_marks_missing_sp_test_unattributed():
@@ -720,6 +721,41 @@ def test_qa_role_workload_skips_ready_for_test_status():
     )
     assert metrics["plan_by_role"]["qa"] == []
     assert metrics["plan_role_coverage"]["qa"]["total"] == 0
+
+
+def test_role_metrics_sprint_includes_done_engineering_tasks():
+    done_issue = normalize_scope_issue(
+        {
+            **_raw_issue("FLEX-100", 5, status="Готово", category="done"),
+            "jira_role_assignees": {"front": "Front Dev", "back": "", "qa": ""},
+            "labels": ["frontend"],
+        }
+    )
+    metrics = compute_scope_metrics_from_sections(
+        80,
+        [{"id": "core", "name": "Plan", "kind": "planned", "order": 0, "issues": [done_issue]}],
+        "2026-06",
+    )
+    assert metrics["plan_by_role"]["front"] == []
+    assert metrics["plan_by_role_sprint"]["front"][0]["developer"] == "Front Dev"
+    assert metrics["plan_by_role_sprint"]["front"][0]["count"] == 1
+
+
+def test_role_metrics_sprint_excludes_not_started_tasks():
+    backlog_issue = normalize_scope_issue(
+        {
+            **_raw_issue("FLEX-101", 3, status="К выполнению", category="new"),
+            "jira_role_assignees": {"front": "Front Dev", "back": "", "qa": ""},
+            "labels": ["frontend"],
+        }
+    )
+    metrics = compute_scope_metrics_from_sections(
+        80,
+        [{"id": "core", "name": "Plan", "kind": "planned", "order": 0, "issues": [backlog_issue]}],
+        "2026-06",
+    )
+    assert metrics["plan_by_role_sprint"]["front"] == []
+    assert metrics["plan_role_coverage_sprint"]["front"]["total"] == 0
 
 
 def test_role_metrics_ignore_gitlab_when_jira_field_empty():
