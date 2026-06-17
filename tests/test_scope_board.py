@@ -1018,3 +1018,34 @@ def test_compute_scope_metrics_dev_test_mode_flags_only_general_sp():
     assert issue["missing_tracks"] == ["dev", "test"]
     assert "указан только общий SP" in issue["workload_attention_reasons"]
     assert metrics["intake_status"] == "warning"
+
+
+def test_compute_scope_metrics_dev_test_mode_accepts_explicit_zero_track_sp():
+    plan = [
+        _dev_test_issue("P-1", sp_dev=5, sp_test=0, status="В работе", category="indeterminate"),
+        _dev_test_issue("P-2", sp_dev=0, sp_test=3, status="Тестирование", category="indeterminate"),
+        _dev_test_issue("P-3", sp_dev=0, sp_test=0, status="В работе", category="indeterminate"),
+    ]
+    metrics = compute_scope_metrics(80, plan, [], "2026-06", workload_mode="sp_dev_test")
+    assert metrics["unestimated_count"] == 0
+    assert metrics["plan_dev_sp"] == 5
+    assert metrics["plan_test_sp"] == 3
+    assert metrics["intake_status"] == "ok"
+
+
+def test_qa_role_workload_accepts_explicit_zero_sp_test():
+    issue = normalize_scope_issue(
+        {
+            **_raw_issue("FLEX-3001", 3, status="Тестирование", category="indeterminate"),
+            "jira_role_assignees": {"front": "", "back": "", "qa": ""},
+            "story_points_test": 0,
+            "assignee": "Александр Катанский",
+        }
+    )
+    metrics = compute_scope_metrics_from_sections(
+        80,
+        [{"id": "core", "name": "Plan", "kind": "planned", "order": 0, "issues": [issue]}],
+        "2026-06",
+    )
+    assert metrics["plan_role_coverage"]["qa"]["unattributed"] == 0
+    assert metrics["plan_by_role"]["qa"][0]["issues"][0].get("role_unresolved", {}).get("qa") is None
