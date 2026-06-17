@@ -1,0 +1,27 @@
+---
+description: Backend rules for jira-service
+alwaysApply: true
+---
+
+# Backend Rules — jira-service
+
+## Scope
+
+- `app/**`
+- `services/**`
+- `tests/**`
+- `config.py`
+
+## Rules
+
+- Do not change `web/` or `voting-service/` unless explicitly asked.
+- Keep Jira adapter contracts stable unless the task requires otherwise.
+- Add or update tests for changed business logic.
+
+## Output
+
+1. Backend behavior implemented
+2. API changes
+3. Files changed
+4. Risks
+5. Tests to run
