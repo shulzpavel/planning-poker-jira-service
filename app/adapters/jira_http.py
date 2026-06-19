@@ -32,6 +32,7 @@ from app.utils.gitlab_role_evidence import (
     build_gitlab_api_workload_items,
     unresolved_reason_for_role,
 )
+from app.adapters.gitlab_http import GitLabHttpClient, gitlab_configured
 from app.adapters.jira_retry import (
     TRANSIENT_HTTP_STATUSES,
     DEFAULT_MAX_CONCURRENT_REQUESTS,
@@ -62,6 +63,10 @@ def _due_date_fallback_field_id() -> str:
     return os.getenv("JIRA_DUE_DATE_FALLBACK_FIELD", "customfield_10624").strip()
 
 
+def _significance_field_id() -> str:
+    return os.getenv("JIRA_SIGNIFICANCE_FIELD", "customfield_14004").strip()
+
+
 def _jira_custom_field_values(raw: Any) -> list[str]:
     if raw is None:
         return []
@@ -78,6 +83,25 @@ def _jira_custom_field_values(raw: Any) -> list[str]:
         return values
     cleaned = str(raw).strip()
     return [cleaned] if cleaned else []
+
+
+def _jira_numeric_field_value(raw: Any) -> Optional[int]:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    if isinstance(raw, dict):
+        for key in ("value", "name"):
+            candidate = str(raw.get(key) or "").strip()
+            if candidate.isdigit():
+                return int(candidate)
+        return None
+    cleaned = str(raw).strip()
+    if cleaned.isdigit():
+        return int(cleaned)
+    return None
 
 
 def _jira_user_field_names(raw: Any) -> list[str]:
@@ -435,6 +459,7 @@ class JiraHttpClient(JiraClient):
         "customfield_11408",  # Story Points_ fact
         "customfield_12978",  # Story Points dev
         "customfield_12979",  # Story Points test
+        "customfield_14004",  # Significance / "Значимость"
         "comment",
     ]
 
@@ -655,6 +680,7 @@ class JiraHttpClient(JiraClient):
         plan_status_field = fields.get(_plan_status_field_id()) or {}
         plan_change_reasons = _jira_custom_field_values(fields.get(_plan_change_reason_field_id()))
         final_priority_field = fields.get("customfield_13401") or {}
+        significance_field = fields.get(_significance_field_id())
         severity_field = fields.get("customfield_10584") or {}
         domain_field = fields.get("customfield_13012") or {}
         request_type_field = fields.get("customfield_10020") or {}
@@ -727,6 +753,7 @@ class JiraHttpClient(JiraClient):
             "plan_change_reason": ", ".join(plan_change_reasons),
             "plan_change_reasons": plan_change_reasons,
             "final_priority": final_priority_field.get("value") or "",
+            "significance": _jira_numeric_field_value(significance_field),
             "severity": severity_field.get("value") or "",
             "domain": domain_field.get("value") or "",
             "request_type": request_type_field.get("requestType", {}).get("name")
@@ -1150,6 +1177,15 @@ class JiraHttpClient(JiraClient):
         """Update Jira due date field with an ISO calendar date."""
         field_id = _due_date_field_id()
         payload = {"fields": {field_id: due_date}}
+        result = await self._make_request("PUT", f"issue/{issue_key}", payload, api_versions=["3", "2"])
+        return result is not None
+
+    async def update_significance(self, issue_key: str, significance: int) -> bool:
+        """Update grooming significance (queue position) for an issue."""
+        field_id = _significance_field_id()
+        if not field_id:
+            return False
+        payload = {"fields": {field_id: significance}}
         result = await self._make_request("PUT", f"issue/{issue_key}", payload, api_versions=["3", "2"])
         return result is not None
 

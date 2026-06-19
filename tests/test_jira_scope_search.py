@@ -203,3 +203,15 @@ def test_finalize_scope_issue_roles_ignores_current_assignee_for_backend_backlog
         histories=None,
     )
     assert "back" not in enriched["role_contributors"]
+
+
+@pytest.mark.asyncio
+async def test_enrich_scope_issues_gitlab_without_config_returns_issues(monkeypatch):
+    monkeypatch.delenv("GITLAB_BASE_URL", raising=False)
+    monkeypatch.delenv("GITLAB_URL", raising=False)
+    monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+    monkeypatch.delenv("GITLAB_PRIVATE_TOKEN", raising=False)
+
+    client = _client()
+    issues = [{"key": "FLEX-1", "_subtasks": [{"key": "FLEX-2"}]}]
+    assert await client._enrich_scope_issues_gitlab(issues) == issues
