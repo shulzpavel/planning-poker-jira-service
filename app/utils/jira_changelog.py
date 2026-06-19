@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 _ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")
@@ -282,3 +283,127 @@ def _infer_role_assignee_from_changelog(
         return current, fallback_source
 
     return "", fallback_source
+
+
+def _parse_changelog_timestamp(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    if len(normalized) >= 5 and normalized[-5] in "+-" and normalized[-3] != ":":
+        normalized = f"{normalized[:-2]}:{normalized[-2:]}"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _status_flow_bucket(status_name: str) -> str:
+    normalized = _norm_lower(status_name)
+    if not normalized:
+        return "other"
+    if any(token in normalized for token in ("пауз", "pause", "on hold", "blocked", "блок")):
+        return "pause"
+    if normalized in {"готово", "done", "closed", "resolved", "cancelled", "canceled"}:
+        return "done"
+    if is_dev_status(status_name, _test_status_keywords()) or normalized in {
+        "тестирование",
+        "к тестированию",
+        "к релизу",
+    }:
+        return "test"
+    if is_dev_status(status_name):
+        return "dev"
+    if normalized in {"backlog", "бэклог", "к выполнению", "to do", "todo", "open"}:
+        return "todo"
+    return "other"
+
+
+def compute_issue_flow_timeline(
+    histories: list[dict[str, Any]],
+    *,
+    current_status: str,
+    current_assignee: str,
+    created_at: str | None = None,
+    ended_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Summarize time-in-status and assignee context from Jira changelog."""
+    end = ended_at or datetime.now(timezone.utc)
+    start = _parse_changelog_timestamp(created_at) or end
+
+    status = ""
+    assignee = _norm(current_assignee)
+    transitions: list[tuple[datetime, str, str, str]] = []
+
+    for at_str, items in _grouped_history_items(histories):
+        at = _parse_changelog_timestamp(at_str)
+        if at is None:
+            continue
+        status_from = ""
+        status_to = ""
+        for item in items:
+            if _is_assignee_field(item.get("field")):
+                to_assignee = _field_value(item.get("toString")) or _field_value(item.get("to"))
+                if to_assignee:
+                    assignee = to_assignee
+            if _is_status_field(item.get("field")):
+                status_from = _status_from_text(item) or status_from
+                status_to = _status_to_text(item) or status_to
+        if status_to:
+            transitions.append((at, status_to, assignee, status_from or status))
+            status = status_to
+
+    timeline_points: list[tuple[datetime, str, str]] = []
+    if transitions:
+        initial_status = transitions[0][3] or _norm(current_status)
+        timeline_points.append((start, initial_status, ""))
+        for at, status_to, assignee_at, _ in transitions:
+            timeline_points.append((at, status_to, assignee_at))
+    else:
+        timeline_points.append((start, _norm(current_status), assignee))
+    if timeline_points[-1][0] < end:
+        timeline_points.append((end, _norm(current_status) or timeline_points[-1][1], assignee))
+
+    segments: list[dict[str, Any]] = []
+    durations: dict[str, float] = {}
+    bucket_durations: dict[str, float] = {
+        "dev": 0.0,
+        "test": 0.0,
+        "todo": 0.0,
+        "pause": 0.0,
+        "done": 0.0,
+        "other": 0.0,
+    }
+    for index in range(len(timeline_points) - 1):
+        entered_at, status_name, segment_assignee = timeline_points[index]
+        left_at = timeline_points[index + 1][0]
+        duration_days = max(0.0, (left_at - entered_at).total_seconds() / 86400.0)
+        rounded = round(duration_days, 2)
+        label = status_name or _norm(current_status) or "—"
+        segments.append(
+            {
+                "status": label,
+                "assignee": segment_assignee,
+                "entered_at": entered_at.isoformat(),
+                "left_at": left_at.isoformat(),
+                "duration_days": rounded,
+                "is_current": index == len(timeline_points) - 2,
+            }
+        )
+        durations[label] = round(durations.get(label, 0.0) + duration_days, 2)
+        bucket = _status_flow_bucket(label)
+        bucket_durations[bucket] = round(bucket_durations.get(bucket, 0.0) + duration_days, 2)
+
+    current_segment = segments[-1] if segments else None
+    return {
+        "status_durations": durations,
+        "status_bucket_durations": bucket_durations,
+        "status_segments": segments[-8:],
+        "current_status_assignee": _norm(current_assignee) or (current_segment or {}).get("assignee", ""),
+        "current_status_days": (current_segment or {}).get("duration_days"),
+    }

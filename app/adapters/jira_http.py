@@ -13,6 +13,7 @@ import aiohttp
 from app.ports.jira_client import JiraClient
 from app.utils.jira_html import html_to_plain_text, sanitize_jira_html
 from app.utils.jira_changelog import (
+    compute_issue_flow_timeline,
     epic_linked_at,
     infer_developer_from_changelog,
     infer_qa_from_changelog,
@@ -61,6 +62,19 @@ def _due_date_field_id() -> str:
 
 def _due_date_fallback_field_id() -> str:
     return os.getenv("JIRA_DUE_DATE_FALLBACK_FIELD", "customfield_10624").strip()
+
+
+def _start_date_field_id() -> str:
+    return os.getenv("JIRA_START_DATE_FIELD", "customfield_10015").strip()
+
+
+def _normalize_scope_calendar_date(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+    return cleaned
 
 
 def _significance_field_id() -> str:
@@ -454,6 +468,7 @@ class JiraHttpClient(JiraClient):
         "customfield_10100",  # Checklist Progress %
         "customfield_10030",  # Story point estimate
         "customfield_10624",  # Due date fallback / "Срок исполнения"
+        "customfield_10015",  # Start date / "Дата начала"
         "customfield_11242",  # Story points (alt)
         "customfield_11407",  # Story Points_ plan
         "customfield_11408",  # Story Points_ fact
@@ -489,6 +504,7 @@ class JiraHttpClient(JiraClient):
             _plan_change_reason_field_id(),
             _due_date_field_id(),
             _due_date_fallback_field_id(),
+            _start_date_field_id(),
             "customfield_13401",
         ):
             if field_id and field_id not in fields:
@@ -734,6 +750,9 @@ class JiraHttpClient(JiraClient):
             "updated": fields.get("updated"),
             "status_changed_at": fields.get("statuscategorychangedate"),
             "due_date": fields.get("duedate") or fields.get(_due_date_field_id()) or fields.get(_due_date_fallback_field_id()),
+            "start_date": _normalize_scope_calendar_date(
+                fields.get(_start_date_field_id()) or fields.get("customfield_10015")
+            ),
             "resolution": resolution_field.get("name") or "",
             "resolution_date": fields.get("resolutiondate"),
             "parent_key": parent_field.get("key") or "",
@@ -1107,6 +1126,13 @@ class JiraHttpClient(JiraClient):
             linked_at = epic_linked_at(histories, epic_key) if epic_key else None
             if linked_at:
                 enriched["epic_linked_at"] = linked_at
+            flow_timeline = compute_issue_flow_timeline(
+                histories,
+                current_status=status_name,
+                current_assignee=str(enriched.get("assignee") or ""),
+                created_at=str(enriched.get("created") or "") or None,
+            )
+            enriched.update(flow_timeline)
         return self._finalize_scope_issue_roles(enriched, histories=histories if histories else None)
 
     async def enrich_scope_issues_milestones(

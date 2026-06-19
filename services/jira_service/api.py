@@ -79,6 +79,7 @@ class ScopeIssueResponse(BaseModel):
     status_changed_at: Optional[str] = None
     status_entered_at: Optional[str] = None
     epic_linked_at: Optional[str] = None
+    start_date: Optional[str] = None
     due_date: Optional[str] = None
     resolution: str = ""
     resolution_date: Optional[str] = None
@@ -111,6 +112,11 @@ class ScopeIssueResponse(BaseModel):
     domain: str = ""
     request_type: str = ""
     checklist_progress: Optional[float] = None
+    status_durations: dict[str, float] = Field(default_factory=dict)
+    status_bucket_durations: dict[str, float] = Field(default_factory=dict)
+    status_segments: list[dict[str, Any]] = Field(default_factory=list)
+    current_status_assignee: str = ""
+    current_status_days: Optional[float] = None
     last_comment: str = ""
     last_comment_author: str = ""
     last_comment_at: Optional[str] = None
@@ -425,6 +431,7 @@ def _scope_issue_responses(issues: list[dict]) -> list[ScopeIssueResponse]:
                 status_changed_at=issue.get("status_changed_at"),
                 status_entered_at=issue.get("status_entered_at"),
                 epic_linked_at=issue.get("epic_linked_at"),
+                start_date=issue.get("start_date"),
                 due_date=issue.get("due_date"),
                 resolution=str(issue.get("resolution") or ""),
                 resolution_date=issue.get("resolution_date"),
@@ -503,6 +510,11 @@ def _scope_issue_responses(issues: list[dict]) -> list[ScopeIssueResponse]:
                 domain=str(issue.get("domain") or ""),
                 request_type=str(issue.get("request_type") or ""),
                 checklist_progress=issue.get("checklist_progress"),
+                status_durations=issue.get("status_durations") or {},
+                status_bucket_durations=issue.get("status_bucket_durations") or {},
+                status_segments=issue.get("status_segments") or [],
+                current_status_assignee=str(issue.get("current_status_assignee") or ""),
+                current_status_days=issue.get("current_status_days"),
                 last_comment=str(issue.get("last_comment") or ""),
                 last_comment_author=str(issue.get("last_comment_author") or ""),
                 last_comment_at=issue.get("last_comment_at"),

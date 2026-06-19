@@ -146,6 +146,7 @@ def normalize_scope_issue(raw: dict[str, Any]) -> dict[str, Any]:
         "status_changed_at": raw.get("status_changed_at"),
         "status_entered_at": raw.get("status_entered_at"),
         "epic_linked_at": raw.get("epic_linked_at"),
+        "start_date": raw.get("start_date"),
         "due_date": raw.get("due_date"),
         "resolution": str(raw.get("resolution") or ""),
         "resolution_date": raw.get("resolution_date"),

@@ -37,6 +37,7 @@ JIRA_QA_ASSIGNEE_FIELD = os.getenv(
 JIRA_PLAN_STATUS_FIELD = os.getenv("JIRA_PLAN_STATUS_FIELD", "customfield_13045").strip()
 JIRA_PLAN_CHANGE_REASON_FIELD = os.getenv("JIRA_PLAN_CHANGE_REASON_FIELD", "customfield_13047").strip()
 JIRA_SIGNIFICANCE_FIELD = os.getenv("JIRA_SIGNIFICANCE_FIELD", "customfield_14004").strip()
+JIRA_START_DATE_FIELD = os.getenv("JIRA_START_DATE_FIELD", "customfield_10015").strip()
 JIRA_DEV_STATUS_KEYWORDS = os.getenv(
     "JIRA_DEV_STATUS_KEYWORDS",
     "dev,development,in progress,разработ,в работе,к выполнению,ready for dev",
