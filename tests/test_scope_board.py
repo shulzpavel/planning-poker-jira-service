@@ -18,6 +18,7 @@ from app.domain.scope_board import (
     normalize_scope_issue,
     normalize_scope_sections,
     pause_supplement_jql,
+    queue_significance_positions,
     refresh_scope_snapshot_metrics,
     sort_issues_by_jira_priority,
 )
@@ -319,6 +320,35 @@ def test_merge_priority_queue_skips_appeared_without_milestone_date():
         refreshed_at="2026-06-20T10:00:00+00:00",
     )
     assert [entry for entry in merged["history"] if entry["type"] == "appeared"] == []
+
+
+def test_queue_significance_positions():
+    assert queue_significance_positions(["P-1", "P-2", "P-3"]) == {
+        "P-1": 1,
+        "P-2": 2,
+        "P-3": 3,
+    }
+
+
+def test_apply_priority_queue_reorder_without_comment_skips_grooming_comment():
+    queue = {
+        "order": ["P-1", "P-2", "P-3"],
+        "issues": [_issue("P-1", 1), _issue("P-2", 2), _issue("P-3", 3)],
+        "history": [],
+    }
+    updated = apply_priority_queue_reorder(
+        queue,
+        order=["P-2", "P-1", "P-3"],
+        comment="",
+        actor_name="PO",
+        changed_at="2026-06-12T11:00:00+00:00",
+        queue_label="Задачи к выполнению",
+        moved_key="P-2",
+    )
+    assert updated["issues"][0]["significance"] == 1
+    assert updated["issues"][1]["significance"] == 2
+    assert updated["issues"][2]["significance"] == 3
+    assert "grooming_comment" not in updated["issues"][0]
 
 
 def test_apply_priority_queue_reorder_requires_comment_history():

@@ -106,6 +106,7 @@ class ScopeIssueResponse(BaseModel):
     plan_change_reason: str = ""
     plan_change_reasons: list[str] = Field(default_factory=list)
     final_priority: str = ""
+    significance: Optional[int] = None
     severity: str = ""
     domain: str = ""
     request_type: str = ""
@@ -191,6 +192,19 @@ class UpdateDueDateResponse(BaseModel):
     success: bool
     issue_key: str
     due_date: str
+
+
+class UpdateSignificanceRequest(BaseModel):
+    """Request model for updating grooming significance in Jira."""
+
+    issue_key: str
+    significance: int = Field(ge=1, le=999)
+
+
+class UpdateSignificanceResponse(BaseModel):
+    success: bool
+    issue_key: str
+    significance: int
 
 
 class AddCommentRequest(BaseModel):
@@ -479,6 +493,7 @@ def _scope_issue_responses(issues: list[dict]) -> list[ScopeIssueResponse]:
                 plan_change_reason=str(issue.get("plan_change_reason") or ""),
                 plan_change_reasons=[str(item) for item in (issue.get("plan_change_reasons") or []) if item],
                 final_priority=str(issue.get("final_priority") or ""),
+                significance=issue.get("significance") if isinstance(issue.get("significance"), int) else None,
                 severity=str(issue.get("severity") or ""),
                 domain=str(issue.get("domain") or ""),
                 request_type=str(issue.get("request_type") or ""),
@@ -738,6 +753,20 @@ async def update_due_date(
         return UpdateDueDateResponse(success=success, issue_key=issue_key, due_date=body.due_date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update due date: {str(e)}")
+
+
+@router.put("/issue/{issue_key}/significance", response_model=UpdateSignificanceResponse)
+async def update_significance(
+    issue_key: str,
+    body: UpdateSignificanceRequest,
+    client: JiraServiceClient = Depends(get_jira_client),
+) -> UpdateSignificanceResponse:
+    """Update grooming significance (queue position) for an issue."""
+    try:
+        success = await client.update_significance(issue_key, body.significance)
+        return UpdateSignificanceResponse(success=success, issue_key=issue_key, significance=body.significance)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update significance: {str(e)}")
 
 
 @router.post("/issue/{issue_key}/comment", response_model=AddCommentResponse)
