@@ -823,8 +823,10 @@ class JiraHttpClient(JiraClient):
             return grouped
 
         chunk_size = max(1, int(os.getenv("SCOPE_JIRA_SUBTASK_BATCH_SIZE", "40")))
-        for start in range(0, len(keys), chunk_size):
-            batch = keys[start : start + chunk_size]
+        batches = [keys[start : start + chunk_size] for start in range(0, len(keys), chunk_size)]
+
+        async def fetch_batch(batch: list[str]) -> dict[str, list[dict[str, Any]]]:
+            batch_grouped: dict[str, list[dict[str, Any]]] = {}
             jql = f"parent in ({','.join(batch)})"
             response = await self.search_scope_issues(jql, max_results=500)
             for issue in response.get("issues", []) if response else []:
@@ -835,7 +837,13 @@ class JiraHttpClient(JiraClient):
                 parent_key = str(parent.get("key") or "").strip()
                 if not parent_key:
                     continue
-                grouped.setdefault(parent_key, []).append(parsed)
+                batch_grouped.setdefault(parent_key, []).append(parsed)
+            return batch_grouped
+
+        batch_results = await asyncio.gather(*[fetch_batch(batch) for batch in batches])
+        for batch_grouped in batch_results:
+            for parent_key, subtasks in batch_grouped.items():
+                grouped.setdefault(parent_key, []).extend(subtasks)
         return grouped
 
     def _merge_gitlab_and_comment_workload_items(
