@@ -136,29 +136,38 @@ class JiraServiceClient:
                 del self._cache[key]
         return await self._client.update_story_points_fields(issue_key, fields)
 
+    def _invalidate_scope_cache(self, *, issue_key: str = "") -> None:
+        if issue_key:
+            needle = issue_key.strip().upper()
+            for key in list(self._cache.keys()):
+                if needle in key.upper():
+                    del self._cache[key]
+            return
+        self._cache.clear()
+
     async def update_due_date(self, issue_key: str, due_date: str) -> bool:
         """Update Jira due date and clear cached projections."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.update_due_date(issue_key, due_date)
 
     async def update_significance(self, issue_key: str, significance: int) -> bool:
         """Update grooming significance and clear cached projections."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.update_significance(issue_key, significance)
 
     async def clear_significance(self, issue_key: str) -> bool:
         """Clear grooming significance and clear cached projections."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.clear_significance(issue_key)
 
     async def add_issue_comment(self, issue_key: str, text: str) -> Optional[Dict[str, Any]]:
         """Append a Jira comment and clear cached issue/search projections."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.add_issue_comment(issue_key, text)
 
     async def add_issue_comment_adf(self, issue_key: str, body: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         """Append an ADF Jira comment and clear cached issue/search projections."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.add_issue_comment_adf(issue_key, body)
 
     async def update_issue_comment_adf(
@@ -168,7 +177,7 @@ class JiraServiceClient:
         body: Mapping[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Update an existing Jira comment with ADF and clear cache."""
-        self._cache.clear()
+        self._invalidate_scope_cache(issue_key=issue_key)
         return await self._client.update_issue_comment_adf(issue_key, comment_id, body)
 
     def get_issue_url(self, issue_key: str) -> str:
