@@ -32,7 +32,12 @@ from app.utils.gitlab_role_evidence import (
     build_gitlab_api_workload_items,
     unresolved_reason_for_role,
 )
-from app.adapters.gitlab_http import GitLabHttpClient, gitlab_configured
+from app.adapters.jira_retry import (
+    TRANSIENT_HTTP_STATUSES,
+    DEFAULT_MAX_CONCURRENT_REQUESTS,
+    retry_after_from_headers,
+    retry_delay_seconds,
+)
 from app.utils.jira_text import adf_to_plain_text, truncate_text
 
 logger = logging.getLogger(__name__)
@@ -190,7 +195,13 @@ class JiraHttpClient(JiraClient):
         self._key_pattern = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
         self._session: Optional[aiohttp.ClientSession] = None
         self._timeout = aiohttp.ClientTimeout(total=timeout)
-        self._retry_attempts = max(1, retry_attempts)
+        env_retries = os.getenv("JIRA_RETRY_ATTEMPTS")
+        self._retry_attempts = max(1, int(env_retries)) if env_retries else max(1, retry_attempts)
+        max_concurrent = max(
+            1,
+            int(os.getenv("JIRA_MAX_CONCURRENT_REQUESTS", str(DEFAULT_MAX_CONCURRENT_REQUESTS))),
+        )
+        self._request_semaphore = asyncio.Semaphore(max_concurrent)
         self.confluence_base_url = _normalise_base_url(
             os.getenv("CONFLUENCE_BASE_URL") or _default_confluence_base_url(base_url)
         )
@@ -209,6 +220,26 @@ class JiraHttpClient(JiraClient):
         if self._session and not self._session.closed:
             await self._session.close()
 
+    async def _sleep_before_retry(
+        self,
+        *,
+        attempt: int,
+        endpoint: str,
+        status: int,
+        headers: Mapping[str, str],
+    ) -> None:
+        retry_after = retry_after_from_headers(headers)
+        delay = retry_delay_seconds(attempt, retry_after_seconds=retry_after)
+        logger.warning(
+            "Jira API transient status, retrying: status=%s endpoint=%s attempt=%s delay=%.2fs retry_after=%s",
+            status,
+            endpoint,
+            attempt,
+            delay,
+            retry_after,
+        )
+        await asyncio.sleep(delay)
+
     async def _make_request(
         self,
         method: str,
@@ -226,38 +257,43 @@ class JiraHttpClient(JiraClient):
         versions = list(api_versions or ["3"])
 
         session = await self._get_session()
-        transient_statuses = {429, 500, 502, 503, 504}
+        transient_statuses = TRANSIENT_HTTP_STATUSES
 
         for version in versions:
             url = f"{self.base_url}/rest/api/{version}/{endpoint}"
             for attempt in range(1, self._retry_attempts + 1):
+                retry_after_response: Optional[tuple[int, Mapping[str, str]]] = None
                 try:
-                    async with session.request(
-                        method, url, auth=auth, headers=headers, json=data
-                    ) as response:
-                        # Handle redirects and deprecated endpoints
-                        if response.status in {301, 302, 303, 307, 308, 404, 410}:
-                            if version != versions[-1]:
-                                break
-                            if response.status in {404, 410}:
-                                return None
+                    async with self._request_semaphore:
+                        async with session.request(
+                            method, url, auth=auth, headers=headers, json=data
+                        ) as response:
+                            # Handle redirects and deprecated endpoints
+                            if response.status in {301, 302, 303, 307, 308, 404, 410}:
+                                if version != versions[-1]:
+                                    break
+                                if response.status in {404, 410}:
+                                    return None
 
-                        if response.status in transient_statuses and attempt < self._retry_attempts:
-                            logger.warning(
-                                "Jira API transient status, retrying: status=%s endpoint=%s attempt=%s",
-                                response.status,
-                                endpoint,
-                                attempt,
-                            )
-                            await asyncio.sleep(0.25 * attempt)
-                            continue
+                            if response.status in transient_statuses and attempt < self._retry_attempts:
+                                retry_after_response = (response.status, response.headers)
+                            else:
+                                response.raise_for_status()
 
-                        response.raise_for_status()
+                                if response.status == 204 or response.content_length == 0:
+                                    return {"success": True}
 
-                        if response.status == 204 or response.content_length == 0:
-                            return {"success": True}
+                                return await response.json()
 
-                        return await response.json()
+                    if retry_after_response is not None:
+                        status, headers = retry_after_response
+                        await self._sleep_before_retry(
+                            attempt=attempt,
+                            endpoint=endpoint,
+                            status=status,
+                            headers=headers,
+                        )
+                        continue
 
                 except aiohttp.ClientResponseError as error:
                     status = error.status
@@ -286,12 +322,18 @@ class JiraHttpClient(JiraClient):
                         body = "<no body>"
                     logger.warning("Jira API error: status=%s url=%s body=%s", status, url, body)
                     if status in transient_statuses and attempt < self._retry_attempts:
-                        await asyncio.sleep(0.25 * attempt)
+                        await self._sleep_before_retry(
+                            attempt=attempt,
+                            endpoint=endpoint,
+                            status=status,
+                            headers=error.response.headers,
+                        )
                         continue
                 except aiohttp.ClientError as error:
                     logger.warning("Jira API request failed: url=%s attempt=%s error=%s", url, attempt, error)
                     if attempt < self._retry_attempts:
-                        await asyncio.sleep(0.25 * attempt)
+                        delay = retry_delay_seconds(attempt)
+                        await asyncio.sleep(delay)
                         continue
                     break
                 except ValueError as error:
