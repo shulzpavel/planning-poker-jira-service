@@ -34,6 +34,25 @@ def test_compute_issue_flow_timeline_aggregates_status_durations():
     assert timeline["current_status_assignee"] == "QA B"
 
 
+def test_resolution_date_caps_terminal_status_duration():
+    resolved = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
+    histories = [
+        {
+            "created": "2026-06-01T10:00:00.000+0000",
+            "items": [{"field": "status", "fromString": "В работе", "toString": "Done"}],
+        },
+    ]
+    timeline = compute_issue_flow_timeline(
+        histories,
+        current_status="Done",
+        current_assignee="Dev A",
+        created_at="2026-05-20T08:00:00.000+0000",
+        ended_at=resolved,
+    )
+    assert timeline["status_durations"]["Done"] <= 3.0
+    assert timeline["status_durations"]["В работе"] >= 11.0
+
+
 def test_k_vypolneniyu_counts_as_todo_not_dev():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     histories = [

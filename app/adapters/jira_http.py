@@ -13,6 +13,7 @@ import aiohttp
 from app.ports.jira_client import JiraClient
 from app.utils.jira_html import html_to_plain_text, sanitize_jira_html
 from app.utils.jira_changelog import (
+    _parse_changelog_timestamp,
     compute_issue_flow_timeline,
     epic_linked_at,
     infer_developer_from_changelog,
@@ -1126,11 +1127,16 @@ class JiraHttpClient(JiraClient):
             linked_at = epic_linked_at(histories, epic_key) if epic_key else None
             if linked_at:
                 enriched["epic_linked_at"] = linked_at
+            ended_at = None
+            resolution_raw = enriched.get("resolution_date")
+            if resolution_raw:
+                ended_at = _parse_changelog_timestamp(str(resolution_raw))
             flow_timeline = compute_issue_flow_timeline(
                 histories,
                 current_status=status_name,
                 current_assignee=str(enriched.get("assignee") or ""),
                 created_at=str(enriched.get("created") or "") or None,
+                ended_at=ended_at,
             )
             enriched.update(flow_timeline)
         return self._finalize_scope_issue_roles(enriched, histories=histories if histories else None)
