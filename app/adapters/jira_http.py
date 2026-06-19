@@ -1189,6 +1189,15 @@ class JiraHttpClient(JiraClient):
         result = await self._make_request("PUT", f"issue/{issue_key}", payload, api_versions=["3", "2"])
         return result is not None
 
+    async def clear_significance(self, issue_key: str) -> bool:
+        """Clear grooming significance field for an issue."""
+        field_id = _significance_field_id()
+        if not field_id:
+            return False
+        payload = {"fields": {field_id: None}}
+        result = await self._make_request("PUT", f"issue/{issue_key}", payload, api_versions=["3", "2"])
+        return result is not None
+
     async def get_version(self, version_id: str) -> Optional[Dict[str, Any]]:
         """Fetch Jira fix version metadata (dates, release status, name)."""
         cleaned = str(version_id or "").strip()

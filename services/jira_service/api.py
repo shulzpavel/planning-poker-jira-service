@@ -207,6 +207,11 @@ class UpdateSignificanceResponse(BaseModel):
     significance: int
 
 
+class ClearSignificanceResponse(BaseModel):
+    success: bool
+    issue_key: str
+
+
 class AddCommentRequest(BaseModel):
     """Request model for adding a Jira comment."""
 
@@ -767,6 +772,19 @@ async def update_significance(
         return UpdateSignificanceResponse(success=success, issue_key=issue_key, significance=body.significance)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update significance: {str(e)}")
+
+
+@router.delete("/issue/{issue_key}/significance", response_model=ClearSignificanceResponse)
+async def clear_significance(
+    issue_key: str,
+    client: JiraServiceClient = Depends(get_jira_client),
+) -> ClearSignificanceResponse:
+    """Clear grooming significance for an issue."""
+    try:
+        success = await client.clear_significance(issue_key)
+        return ClearSignificanceResponse(success=success, issue_key=issue_key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear significance: {str(e)}")
 
 
 @router.post("/issue/{issue_key}/comment", response_model=AddCommentResponse)

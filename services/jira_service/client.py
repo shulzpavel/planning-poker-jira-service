@@ -146,6 +146,11 @@ class JiraServiceClient:
         self._cache.clear()
         return await self._client.update_significance(issue_key, significance)
 
+    async def clear_significance(self, issue_key: str) -> bool:
+        """Clear grooming significance and clear cached projections."""
+        self._cache.clear()
+        return await self._client.clear_significance(issue_key)
+
     async def add_issue_comment(self, issue_key: str, text: str) -> Optional[Dict[str, Any]]:
         """Append a Jira comment and clear cached issue/search projections."""
         self._cache.clear()

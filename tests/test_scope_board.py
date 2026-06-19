@@ -19,6 +19,7 @@ from app.domain.scope_board import (
     normalize_scope_sections,
     pause_supplement_jql,
     queue_significance_positions,
+    queue_warehouse_type,
     refresh_scope_snapshot_metrics,
     sort_issues_by_jira_priority,
 )
@@ -275,7 +276,7 @@ def test_merge_scope_issues_prefers_later_group():
     assert merged[0]["status"] == "Пауза"
 
 
-def test_merge_priority_queue_puts_new_issues_first_and_preserves_existing_order():
+def test_merge_priority_queue_keeps_ranked_and_puts_new_issues_on_warehouse():
     fetched = [
         {**_issue("P-1", 3), "priority": "High", "status": "К выполнению", "status_entered_at": "2026-06-10T10:00:00+00:00"},
         {**_issue("P-2", 2), "priority": "Highest", "status": "К выполнению", "status_entered_at": "2026-06-11T10:00:00+00:00"},
@@ -283,6 +284,7 @@ def test_merge_priority_queue_puts_new_issues_first_and_preserves_existing_order
         {**_issue("P-4", 1), "issue_type": "Bug", "priority": "Highest", "status": "К выполнению", "status_entered_at": "2026-06-19T10:00:00+00:00"},
     ]
     previous = {
+        "ranked_order": ["P-2", "P-1"],
         "order": ["P-2", "P-1"],
         "issues": fetched[:2],
         "history": [
@@ -302,7 +304,11 @@ def test_merge_priority_queue_puts_new_issues_first_and_preserves_existing_order
         queue_label="Задачи к выполнению",
         refreshed_at="2026-06-20T10:00:00+00:00",
     )
-    assert [issue["key"] for issue in merged["issues"]] == ["P-3", "P-2", "P-1", "P-4"]
+    assert merged["ranked_order"] == ["P-2", "P-1"]
+    assert {issue["key"] for issue in merged["issues"]} == {"P-1", "P-2", "P-3", "P-4"}
+    assert set(merged["warehouse_new_keys"]) == {"P-3", "P-4"}
+    assert merged["warehouse_new_counts"]["bug"] == 1
+    assert merged["warehouse_new_counts"]["story"] == 1
     appeared = [entry for entry in merged["history"] if entry["type"] == "appeared"]
     assert len(appeared) == 4
     by_key = {entry["issue_key"]: entry["at"] for entry in appeared}
@@ -332,6 +338,7 @@ def test_queue_significance_positions():
 
 def test_apply_priority_queue_reorder_without_comment_skips_grooming_comment():
     queue = {
+        "ranked_order": ["P-1", "P-2", "P-3"],
         "order": ["P-1", "P-2", "P-3"],
         "issues": [_issue("P-1", 1), _issue("P-2", 2), _issue("P-3", 3)],
         "history": [],
@@ -345,14 +352,16 @@ def test_apply_priority_queue_reorder_without_comment_skips_grooming_comment():
         queue_label="Задачи к выполнению",
         moved_key="P-2",
     )
-    assert updated["issues"][0]["significance"] == 1
-    assert updated["issues"][1]["significance"] == 2
-    assert updated["issues"][2]["significance"] == 3
-    assert "grooming_comment" not in updated["issues"][0]
+    by_key = {issue["key"]: issue for issue in updated["issues"]}
+    assert by_key["P-2"]["significance"] == 1
+    assert by_key["P-1"]["significance"] == 2
+    assert by_key["P-3"]["significance"] == 3
+    assert "grooming_comment" not in by_key["P-2"]
 
 
 def test_apply_priority_queue_reorder_requires_comment_history():
     queue = {
+        "ranked_order": ["P-1", "P-2", "P-3"],
         "order": ["P-1", "P-2", "P-3"],
         "issues": [_issue("P-1", 1), _issue("P-2", 2), _issue("P-3", 3)],
         "history": [],
@@ -366,10 +375,11 @@ def test_apply_priority_queue_reorder_requires_comment_history():
         queue_label="Задачи к выполнению",
         moved_key="P-2",
     )
-    assert [issue["key"] for issue in updated["issues"]] == ["P-2", "P-1", "P-3"]
+    assert updated["ranked_order"] == ["P-2", "P-1", "P-3"]
     assert updated["history"][0]["type"] == "reorder"
     assert updated["history"][0]["issue_key"] == "P-2"
-    assert updated["issues"][0]["grooming_comment"] == "Подняли из-за блокера"
+    by_key = {issue["key"]: issue for issue in updated["issues"]}
+    assert by_key["P-2"]["grooming_comment"] == "Подняли из-за блокера"
 
 
 def test_apply_priority_queue_comment_appends_history():
