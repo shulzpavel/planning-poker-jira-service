@@ -29,4 +29,30 @@ def test_compute_issue_flow_timeline_aggregates_status_durations():
     assert timeline["status_durations"]["Тестирование"] >= 8.9
     assert timeline["status_bucket_durations"]["dev"] >= 8.9
     assert timeline["status_bucket_durations"]["test"] >= 8.9
+    assert timeline["status_flow_bucket_map"]["В работе"] == "dev"
+    assert timeline["status_flow_bucket_map"]["Тестирование"] == "test"
     assert timeline["current_status_assignee"] == "QA B"
+
+
+def test_k_vypolneniyu_counts_as_todo_not_dev():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    histories = [
+        {
+            "created": "2026-06-01T10:00:00.000+0000",
+            "items": [{"field": "status", "fromString": "Backlog", "toString": "К выполнению"}],
+        },
+        {
+            "created": "2026-06-10T10:00:00.000+0000",
+            "items": [{"field": "status", "fromString": "К выполнению", "toString": "В работе"}],
+        },
+    ]
+    timeline = compute_issue_flow_timeline(
+        histories,
+        current_status="В работе",
+        current_assignee="Dev A",
+        created_at="2026-06-01T08:00:00.000+0000",
+        ended_at=now,
+    )
+    assert timeline["status_bucket_durations"]["todo"] >= 8.9
+    assert timeline["status_bucket_durations"]["dev"] >= 8.9
+    assert timeline["status_flow_bucket_map"]["К выполнению"] == "todo"

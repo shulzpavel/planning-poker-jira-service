@@ -7,6 +7,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from app.utils.status_flow_buckets import classify_status_flow_bucket
+
 _ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")
 
 
@@ -303,27 +305,6 @@ def _parse_changelog_timestamp(value: Any) -> Optional[datetime]:
     return parsed
 
 
-def _status_flow_bucket(status_name: str) -> str:
-    normalized = _norm_lower(status_name)
-    if not normalized:
-        return "other"
-    if any(token in normalized for token in ("пауз", "pause", "on hold", "blocked", "блок")):
-        return "pause"
-    if normalized in {"готово", "done", "closed", "resolved", "cancelled", "canceled"}:
-        return "done"
-    if is_dev_status(status_name, _test_status_keywords()) or normalized in {
-        "тестирование",
-        "к тестированию",
-        "к релизу",
-    }:
-        return "test"
-    if is_dev_status(status_name):
-        return "dev"
-    if normalized in {"backlog", "бэклог", "к выполнению", "to do", "todo", "open"}:
-        return "todo"
-    return "other"
-
-
 def compute_issue_flow_timeline(
     histories: list[dict[str, Any]],
     *,
@@ -396,13 +377,15 @@ def compute_issue_flow_timeline(
             }
         )
         durations[label] = round(durations.get(label, 0.0) + duration_days, 2)
-        bucket = _status_flow_bucket(label)
+        bucket = classify_status_flow_bucket(label)
         bucket_durations[bucket] = round(bucket_durations.get(bucket, 0.0) + duration_days, 2)
 
     current_segment = segments[-1] if segments else None
+    status_flow_bucket_map = {status: classify_status_flow_bucket(status) for status in durations}
     return {
         "status_durations": durations,
         "status_bucket_durations": bucket_durations,
+        "status_flow_bucket_map": status_flow_bucket_map,
         "status_segments": segments[-8:],
         "current_status_assignee": _norm(current_assignee) or (current_segment or {}).get("assignee", ""),
         "current_status_days": (current_segment or {}).get("duration_days"),

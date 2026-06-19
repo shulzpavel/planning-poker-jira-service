@@ -114,6 +114,7 @@ class ScopeIssueResponse(BaseModel):
     checklist_progress: Optional[float] = None
     status_durations: dict[str, float] = Field(default_factory=dict)
     status_bucket_durations: dict[str, float] = Field(default_factory=dict)
+    status_flow_bucket_map: dict[str, str] = Field(default_factory=dict)
     status_segments: list[dict[str, Any]] = Field(default_factory=list)
     current_status_assignee: str = ""
     current_status_days: Optional[float] = None
@@ -512,6 +513,7 @@ def _scope_issue_responses(issues: list[dict]) -> list[ScopeIssueResponse]:
                 checklist_progress=issue.get("checklist_progress"),
                 status_durations=issue.get("status_durations") or {},
                 status_bucket_durations=issue.get("status_bucket_durations") or {},
+                status_flow_bucket_map=issue.get("status_flow_bucket_map") or {},
                 status_segments=issue.get("status_segments") or [],
                 current_status_assignee=str(issue.get("current_status_assignee") or ""),
                 current_status_days=issue.get("current_status_days"),
