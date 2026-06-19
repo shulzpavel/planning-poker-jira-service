@@ -28,7 +28,7 @@ def test_parse_retry_after_invalid():
 
 def test_retry_delay_honors_retry_after():
     assert retry_delay_seconds(1, retry_after_seconds=15.0) == 15.0
-    assert retry_delay_seconds(3, retry_after_seconds=120.0, max_delay=60.0) == 60.0
+    assert retry_delay_seconds(3, retry_after_seconds=120.0, max_delay=60.0) == 120.0
 
 
 def test_retry_delay_uses_exponential_jitter_without_retry_after():

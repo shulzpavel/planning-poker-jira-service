@@ -51,7 +51,9 @@ def retry_delay_seconds(
 ) -> float:
     """Exponential backoff with full jitter; honor Retry-After when provided."""
     if retry_after_seconds is not None:
-        return min(max_delay, max(0.0, retry_after_seconds))
+        # Retry-After is authoritative — do not cap with max_delay, otherwise
+        # a 429 with a long server hint would retry too soon and amplify throttling.
+        return max(0.0, retry_after_seconds)
 
     # attempt is 1-based (first retry after initial failure).
     exponent = max(0, attempt - 1)
