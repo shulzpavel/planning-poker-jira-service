@@ -386,7 +386,7 @@ def compute_issue_flow_timeline(
         "status_durations": durations,
         "status_bucket_durations": bucket_durations,
         "status_flow_bucket_map": status_flow_bucket_map,
-        "status_segments": segments[-8:],
+        "status_segments": segments,
         "current_status_assignee": _norm(current_assignee) or (current_segment or {}).get("assignee", ""),
         "current_status_days": (current_segment or {}).get("duration_days"),
     }
