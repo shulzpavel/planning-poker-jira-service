@@ -239,3 +239,8 @@ class JiraServiceClient:
     async def close(self) -> None:
         """Close client connections."""
         await self._client.close()
+
+    def is_ready(self) -> bool:
+        """Return True when the lifespan-managed HTTP session is still usable."""
+        session = self._client._session
+        return session is None or not session.closed

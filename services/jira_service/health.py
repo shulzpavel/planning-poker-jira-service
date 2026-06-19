@@ -1,11 +1,10 @@
 """Health check endpoints for Jira Service."""
 
 import os
+from typing import Optional
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
-
-from services.jira_service.client import JiraServiceClient
 
 router = APIRouter()
 health_router = router  # backward compatibility
@@ -31,34 +30,42 @@ def _demo_fallback_enabled() -> bool:
     return os.getenv("JIRA_DEMO_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
-@router.get("/ready")
-async def readiness_check(response: Response) -> dict:
-    """Readiness without leaking Jira credentials."""
-    jira_configured = _env_present("JIRA_URL") and _env_present("JIRA_USERNAME") and _env_present("JIRA_API_TOKEN")
-    story_points_field = os.getenv("STORY_POINTS_FIELD", "").strip()
-    demo_fallback = _demo_fallback_enabled()
+def _readiness_payload(*, status: str, error: Optional[str] = None) -> dict:
+    payload = {
+        "status": status,
+        "jira_configured": _env_present("JIRA_URL")
+        and _env_present("JIRA_USERNAME")
+        and _env_present("JIRA_API_TOKEN"),
+        "demo_fallback_enabled": _demo_fallback_enabled(),
+        "story_points_field": os.getenv("STORY_POINTS_FIELD", "").strip() or None,
+    }
+    if error:
+        payload["error"] = error
+    return payload
 
-    try:
-        client = JiraServiceClient()
-        await client.close()
-        status = "ready" if jira_configured or demo_fallback else "not_ready"
-        if status != "ready":
-            response.status_code = 503
-        return {
-            "status": status,
-            "jira_configured": jira_configured,
-            "demo_fallback_enabled": demo_fallback,
-            "story_points_field": story_points_field or None,
-        }
-    except Exception as exc:  # noqa: BLE001
+
+@router.get("/ready")
+async def readiness_check(request: Request, response: Response) -> dict:
+    """Readiness without leaking Jira credentials or opening new HTTP clients."""
+    jira_configured = _env_present("JIRA_URL") and _env_present("JIRA_USERNAME") and _env_present(
+        "JIRA_API_TOKEN"
+    )
+    demo_fallback = _demo_fallback_enabled()
+    expected_ready = jira_configured or demo_fallback
+
+    client = getattr(request.app.state, "jira_client", None)
+    if client is None:
         response.status_code = 503
-        return {
-            "status": "not_ready",
-            "jira_configured": jira_configured,
-            "demo_fallback_enabled": demo_fallback,
-            "story_points_field": story_points_field or None,
-            "error": str(exc),
-        }
+        return _readiness_payload(status="not_ready", error="jira_client not initialized")
+
+    if not client.is_ready():
+        response.status_code = 503
+        return _readiness_payload(status="not_ready", error="jira_client session closed")
+
+    status = "ready" if expected_ready else "not_ready"
+    if status != "ready":
+        response.status_code = 503
+    return _readiness_payload(status=status)
 
 
 @router.get("/live")
