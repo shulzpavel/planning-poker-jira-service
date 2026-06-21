@@ -25,6 +25,8 @@ class JiraServiceClient:
         self._cache_ttl = timedelta(minutes=5)
         self._cache_max_items = max(1, int(os.getenv("JIRA_CACHE_MAX_ITEMS", "1000")))
         self._inflight: dict[str, asyncio.Task[Any]] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     def _get_cache_key(self, operation: str, *args) -> str:
         """Generate cache key."""
@@ -37,13 +39,25 @@ class JiraServiceClient:
     def _get_cached(self, cache_key: str) -> Optional[Any]:
         cached = self._cache.get(cache_key)
         if not cached:
+            self._cache_misses += 1
             return None
         result, cached_at = cached
         if not self._is_cache_valid(cached_at):
             self._cache.pop(cache_key, None)
+            self._cache_misses += 1
             return None
         self._cache.move_to_end(cache_key)
+        self._cache_hits += 1
         return result
+
+    def cache_metrics(self) -> dict[str, int]:
+        """In-process Jira response cache counters for /metrics."""
+        return {
+            "cache_size": len(self._cache),
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "inflight_requests": len(self._inflight),
+        }
 
     def _set_cached(self, cache_key: str, result: Any) -> None:
         self._cache[cache_key] = (result, datetime.utcnow())
