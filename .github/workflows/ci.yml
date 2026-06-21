@@ -47,7 +47,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t planning-poker-jira-service .
+      - name: Build image
+        run: docker build -t planning-poker-jira-service .
+      - name: Verify planning_poker_common import in image
+        run: |
+          docker run --rm planning-poker-jira-service python -c \
+            "import planning_poker_common; print('planning_poker_common OK')"
 
   deploy:
     name: Deploy jira-service to production
