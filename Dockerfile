@@ -18,7 +18,7 @@ RUN PIP_INDEX_URL=${PIP_INDEX_URL} \
 
 COPY services/ ./services/
 COPY app/ ./app/
-COPY config.py .
+COPY config.py jira_fields.py .
 
 EXPOSE 8001
 CMD ["python", "-m", "services.jira_service.main"]
