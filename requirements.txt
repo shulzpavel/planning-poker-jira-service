@@ -1,3 +1,4 @@
+planning-poker-common @ git+https://github.com/shulzpavel/planning-poker-python-lib@v0.1.2
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 pydantic>=2.0.0
