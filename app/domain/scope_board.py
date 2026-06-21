@@ -96,13 +96,8 @@ def _jira_role_assignees(raw: dict[str, Any]) -> dict[str, str]:
 
 
 def jira_role_fields_configured() -> dict[str, bool]:
-    from config import JIRA_BACK_ASSIGNEE_FIELD, JIRA_FRONT_ASSIGNEE_FIELD, JIRA_QA_ASSIGNEE_FIELD
-
-    return {
-        "front": bool(JIRA_FRONT_ASSIGNEE_FIELD),
-        "back": bool(JIRA_BACK_ASSIGNEE_FIELD),
-        "qa": bool(JIRA_QA_ASSIGNEE_FIELD),
-    }
+    """Default when no jira-service fetch merged yet; live values come from scope refresh API."""
+    return {"front": False, "back": False, "qa": False}
 
 
 def merge_jira_role_fields_configured(*sources: dict[str, Any] | None) -> dict[str, bool]:
@@ -179,6 +174,12 @@ def normalize_scope_issue(raw: dict[str, Any]) -> dict[str, Any]:
         "domain": str(raw.get("domain") or ""),
         "request_type": str(raw.get("request_type") or ""),
         "checklist_progress": raw.get("checklist_progress") if isinstance(raw.get("checklist_progress"), (int, float)) else None,
+        "status_durations": raw.get("status_durations") if isinstance(raw.get("status_durations"), dict) else {},
+        "status_bucket_durations": raw.get("status_bucket_durations") if isinstance(raw.get("status_bucket_durations"), dict) else {},
+        "status_flow_bucket_map": raw.get("status_flow_bucket_map") if isinstance(raw.get("status_flow_bucket_map"), dict) else {},
+        "status_segments": raw.get("status_segments") if isinstance(raw.get("status_segments"), list) else [],
+        "current_status_assignee": str(raw.get("current_status_assignee") or ""),
+        "current_status_days": raw.get("current_status_days"),
         "last_comment": str(raw.get("last_comment") or ""),
         "last_comment_author": str(raw.get("last_comment_author") or ""),
         "last_comment_at": raw.get("last_comment_at"),
@@ -898,6 +899,14 @@ def pause_supplement_jql(base_jql: str) -> str:
     )
 
 
+def jql_has_status_filter(jql: str) -> bool:
+    """True when JQL already constrains workflow status (pause supplement would be redundant)."""
+    text = jql.strip().lower()
+    if not text:
+        return False
+    return bool(re.search(r"\bstatus\s*(?:=|!=|in|not in|was not|was|changed)", text))
+
+
 def default_scope_sections() -> list[dict[str, Any]]:
     return [
         {"id": "plan", "name": "Plan", "jql": "", "kind": "planned", "order": 0},
@@ -1153,12 +1162,37 @@ def warehouse_type_sort_key(issue: dict[str, Any]) -> int:
 
 def _normalize_ranked_order(queue: dict[str, Any]) -> list[str]:
     ranked = queue.get("ranked_order")
-    if isinstance(ranked, list) and ranked:
+    if isinstance(ranked, list):
         return [str(key) for key in ranked if str(key).strip()]
-    legacy_order = queue.get("order")
-    if isinstance(legacy_order, list) and legacy_order:
-        return [str(key) for key in legacy_order if str(key).strip()]
     return []
+
+
+def collect_priority_queue_significance_keys(queue: dict[str, Any]) -> list[str]:
+    """Keys that may have significance in Jira or locally (incl. legacy order)."""
+    keys: set[str] = set()
+    for key in _normalize_ranked_order(queue):
+        keys.add(str(key).upper())
+    legacy_order = queue.get("order")
+    if isinstance(legacy_order, list):
+        for key in legacy_order:
+            cleaned = str(key).strip().upper()
+            if cleaned:
+                keys.add(cleaned)
+    for issue in queue.get("issues") or []:
+        issue_key = str(issue.get("key") or "").strip().upper()
+        if issue_key and issue.get("significance") is not None:
+            keys.add(issue_key)
+    return sorted(keys)
+
+
+def clear_priority_queue_ranked(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    updated = copy.deepcopy(queue or {})
+    keys_to_clear = collect_priority_queue_significance_keys(updated)
+    for issue in updated.get("issues") or []:
+        issue.pop("significance", None)
+    updated["ranked_order"] = []
+    updated["order"] = []
+    return updated, keys_to_clear
 
 
 def _queue_ranked_order_keys(queue: dict[str, Any]) -> list[str]:
