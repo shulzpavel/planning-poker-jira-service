@@ -20,6 +20,16 @@ PYTHONPATH=. python -m services.jira_service.main
 Health: http://localhost:8001/health  
 OpenAPI: http://localhost:8001/docs
 
+## Docker
+
+Build from the **repository root** (used by `planning-poker-dev` compose):
+
+```bash
+docker build -t planning-poker-jira-service .
+```
+
+Legacy `services/jira_service/Dockerfile` (monorepo `backend/` paths) was removed.
+
 ## Endpoints
 
 | Path | Use case |
