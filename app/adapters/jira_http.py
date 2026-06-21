@@ -511,8 +511,8 @@ class JiraHttpClient(JiraClient):
             if field_id and field_id not in fields:
                 fields.append(field_id)
         for field_id in (
-            JIRA_SP_DEV_FIELD or "customfield_12978",
-            JIRA_SP_TEST_FIELD or "customfield_12979",
+            JIRA_SP_DEV_FIELD,
+            JIRA_SP_TEST_FIELD,
             JIRA_SP_FRONT_FIELD,
             JIRA_SP_BACK_FIELD,
             JIRA_SP_QA_FIELD,
@@ -735,8 +735,8 @@ class JiraHttpClient(JiraClient):
             "story_points_source": story_points_source,
             "story_points_plan": fields.get("customfield_11407"),
             "story_points_fact": fields.get("customfield_11408"),
-            "story_points_dev": fields.get(JIRA_SP_DEV_FIELD or "customfield_12978"),
-            "story_points_test": fields.get(JIRA_SP_TEST_FIELD or "customfield_12979"),
+            "story_points_dev": fields.get(JIRA_SP_DEV_FIELD),
+            "story_points_test": fields.get(JIRA_SP_TEST_FIELD),
             "story_points_front": fields.get(JIRA_SP_FRONT_FIELD) if JIRA_SP_FRONT_FIELD else None,
             "story_points_back": fields.get(JIRA_SP_BACK_FIELD) if JIRA_SP_BACK_FIELD else None,
             "story_points_qa": fields.get(JIRA_SP_QA_FIELD) if JIRA_SP_QA_FIELD else None,
