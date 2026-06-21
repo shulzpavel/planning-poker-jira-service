@@ -9,12 +9,12 @@ KNOWN_SP_TRACKS = frozenset({"dev", "test", "front", "back", "qa"})
 
 
 def _env(name: str, default: str = "") -> str:
-    return os.getenv(name, default).strip()
+    return (os.getenv(name) or default).strip()
 
 
 STORY_POINTS_FIELD = _env("STORY_POINTS_FIELD", "customfield_10022")
-JIRA_SP_DEV_FIELD = _env("JIRA_SP_DEV_FIELD")
-JIRA_SP_TEST_FIELD = _env("JIRA_SP_TEST_FIELD")
+JIRA_SP_DEV_FIELD = _env("JIRA_SP_DEV_FIELD", "customfield_12978")
+JIRA_SP_TEST_FIELD = _env("JIRA_SP_TEST_FIELD", "customfield_12979")
 JIRA_SP_FRONT_FIELD = _env("JIRA_SP_FRONT_FIELD")
 JIRA_SP_BACK_FIELD = _env("JIRA_SP_BACK_FIELD")
 JIRA_SP_QA_FIELD = _env("JIRA_SP_QA_FIELD")
@@ -43,12 +43,20 @@ TRACK_FIELD_ENV_NAMES: dict[str, str] = {
     "qa": "JIRA_SP_QA_FIELD",
 }
 
+TRACK_FIELD_BY_KEY: dict[str, str] = {
+    "dev": JIRA_SP_DEV_FIELD,
+    "test": JIRA_SP_TEST_FIELD,
+    "front": JIRA_SP_FRONT_FIELD,
+    "back": JIRA_SP_BACK_FIELD,
+    "qa": JIRA_SP_QA_FIELD,
+}
+
 
 def resolve_sp_track_field(track: str) -> tuple[str, Optional[str]]:
     """Map semantic track key to (env var name, Jira field id or None if unset)."""
     key = str(track or "").strip().lower()
     env_name = TRACK_FIELD_ENV_NAMES.get(key, f"JIRA_SP_{key.upper()}_FIELD")
-    field_id = _env(env_name) or None
+    field_id = TRACK_FIELD_BY_KEY.get(key) or _env(env_name) or None
     return env_name, field_id
 
 
