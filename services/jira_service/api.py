@@ -188,6 +188,22 @@ class UpdateSPFieldsResponse(BaseModel):
     results: Dict[str, bool]
 
 
+class UpdateSPTracksRequest(BaseModel):
+    """Update SP by semantic track keys (dev, test, front, back, qa)."""
+
+    issue_key: str
+    tracks: Dict[str, int] = Field(default_factory=dict)
+
+
+class UpdateSPTracksResponse(BaseModel):
+    """Per-track write results keyed by semantic track name."""
+
+    success: bool
+    issue_key: str
+    results: Dict[str, bool] = Field(default_factory=dict)
+    skipped_tracks: List[str] = Field(default_factory=list)
+
+
 class UpdateDueDateRequest(BaseModel):
     """Request model for updating Jira due date."""
 
@@ -758,6 +774,36 @@ async def update_story_points_fields(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update story point fields: {str(e)}")
+
+
+@router.put("/issue/{issue_key}/story-points/tracks", response_model=UpdateSPTracksResponse)
+async def update_story_points_tracks(
+    issue_key: str,
+    body: UpdateSPTracksRequest,
+    client: JiraServiceClient = Depends(get_jira_client),
+) -> UpdateSPTracksResponse:
+    """Update SP custom fields using semantic track keys; field mapping stays in jira-service."""
+    from jira_fields import map_sp_tracks_to_fields
+
+    try:
+        fields, skipped_tracks, field_to_track = map_sp_tracks_to_fields(body.tracks)
+        track_results: Dict[str, bool] = {track: False for track in skipped_tracks}
+        if fields:
+            field_results = await client.update_story_points_fields(issue_key, fields)
+            for field_id, ok in field_results.items():
+                track_key = field_to_track.get(field_id)
+                if track_key:
+                    track_results[track_key] = bool(ok)
+        attempted = [k for k in body.tracks if k not in skipped_tracks]
+        success = bool(attempted) and all(track_results.get(k) for k in attempted)
+        return UpdateSPTracksResponse(
+            success=success,
+            issue_key=issue_key,
+            results=track_results,
+            skipped_tracks=skipped_tracks,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update story point tracks: {str(e)}")
 
 
 @router.put("/issue/{issue_key}/due-date", response_model=UpdateDueDateResponse)
