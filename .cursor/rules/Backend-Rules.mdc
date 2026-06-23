@@ -1,27 +1,40 @@
 ---
-description: Backend rules for jira-service
-alwaysApply: true
+description: planning-poker-jira-service backend rules for Jira/GitLab adapter contracts and tests
+globs: "app/**/*.py,services/**/*.py,tests/**/*.py,config.py,jira_fields.py,requirements.txt,pytest.ini"
+alwaysApply: false
 ---
 
-# Backend Rules — jira-service
+# Backend Rules - planning-poker-jira-service
 
 ## Scope
 
-- `app/**`
-- `services/**`
-- `tests/**`
-- `config.py`
+`planning-poker-jira-service` owns Jira Cloud REST access, scope search/enrichment, changelog/status milestone parsing, role contributors and optional GitLab evidence.
 
-## Rules
+It is stateless: no Postgres, Redis, sessions, RBAC or scope-board persistence.
 
-- Do not change `web/` or `voting-service/` unless explicitly asked.
-- Keep Jira adapter contracts stable unless the task requires otherwise.
-- Add or update tests for changed business logic.
+## Read Before Changing
 
-## Output
+- Service boundaries: `../planning-poker-dev/docs/architecture/SERVICES.md`.
+- Jira contract: `../planning-poker-dev/docs/contracts/JIRA-SERVICE.md`.
+- Scope board contract: `../planning-poker-dev/docs/contracts/SCOPE-BOARD.md`.
+- Development practices: `../planning-poker-dev/docs/development/GUIDE.md`.
 
-1. Backend behavior implemented
-2. API changes
-3. Files changed
-4. Risks
-5. Tests to run
+## Implementation Rules
+
+- Keep Jira adapter contracts stable unless the task explicitly requires a contract change.
+- Preserve singleton client/cache behavior; do not create per-request Jira clients for readiness or normal requests.
+- Keep Jira/GitLab HTTP concerns in adapters; keep parsing/enrichment logic in domain/utils where existing patterns place it.
+- Do not add persistence, RBAC/session logic or frontend assumptions to this service.
+- Sanitize external data before returning it to callers.
+- Do not log Jira tokens, credentials, request auth headers or sensitive issue data beyond existing safe context.
+
+## Testing
+
+- Changed parsing/enrichment/API logic requires pytest coverage in `tests/`.
+- Contract changes require tests for response shape and error behavior.
+- Retry/rate-limit/dependency-failure behavior needs regression coverage when touched.
+- Run `python3 -m pytest -q` before commit/push.
+
+## Documentation
+
+Update `../planning-poker-dev/docs/contracts/JIRA-SERVICE.md` or related docs when endpoints, response shapes, config or integration behavior changes.
