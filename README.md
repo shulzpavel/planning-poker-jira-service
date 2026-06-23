@@ -45,7 +45,7 @@ docker build -t planning-poker-jira-service .
 docker run --rm planning-poker-jira-service python -c "import planning_poker_common"
 ```
 
-Shared lib: **tarball URL** in `requirements.txt` — never `git+https://` in Docker ([PYTHON-LIB.md](https://github.com/shulzpavel/planning-poker-dev/blob/main/docs/architecture/PYTHON-LIB.md)).
+Shared lib is **vendored** under `vendor/planning-poker-common/` and loaded via `PYTHONPATH` ([PYTHON-LIB.md](https://github.com/shulzpavel/planning-poker-dev/blob/main/docs/architecture/PYTHON-LIB.md)).
 
 ## Key endpoints
 
@@ -66,7 +66,7 @@ Shared lib: **tarball URL** in `requirements.txt` — never `git+https://` in Do
 ## Tests
 
 ```bash
-PYTHONPATH=. python -m pytest -q
+PYTHONPATH=vendor/planning-poker-common:. python -m pytest -q
 ```
 
 Scope enrichment: `tests/test_scope_board.py`.
@@ -78,5 +78,4 @@ CI: pytest + `docker build` + `import planning_poker_common`. Push to `main` dep
 ## Related repos
 
 - [planning-poker-voting-service](https://github.com/shulzpavel/planning-poker-voting-service) — sole HTTP client
-- [planning-poker-python-lib](https://github.com/shulzpavel/planning-poker-python-lib) — shared pure modules
-- [planning-poker-dev](https://github.com/shulzpavel/planning-poker-dev) — compose & deploy
+- [planning-poker-dev](https://github.com/shulzpavel/planning-poker-dev) — compose, deploy, `sync-vendor-common.sh`

@@ -1,6 +1,6 @@
 ---
 description: planning-poker-jira-service backend rules for Jira/GitLab adapter contracts and tests
-globs: "app/**/*.py,services/**/*.py,tests/**/*.py,config.py,jira_fields.py,requirements.txt,pytest.ini"
+globs: "app/**/*.py,services/**/*.py,tests/**/*.py,vendor/**/*.py,config.py,jira_fields.py,requirements.txt,pytest.ini"
 alwaysApply: false
 ---
 
@@ -18,6 +18,7 @@ It is stateless: no Postgres, Redis, sessions, RBAC or scope-board persistence.
 - Jira contract: `../planning-poker-dev/docs/contracts/JIRA-SERVICE.md`.
 - Scope board contract: `../planning-poker-dev/docs/contracts/SCOPE-BOARD.md`.
 - Development practices: `../planning-poker-dev/docs/development/GUIDE.md`.
+- Shared domain: `vendor/planning-poker-common/planning_poker_common/` (sync via `../planning-poker-dev/scripts/sync-vendor-common.sh`).
 
 ## Implementation Rules
 
