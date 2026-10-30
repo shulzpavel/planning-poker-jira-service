@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from services.jira_service.api import router
+from services.jira_service.intake_api import router as intake_router
 from services.jira_service.client import JiraServiceClient
 from services.jira_service.health import health_router
 from services.jira_service.metrics import metrics_router
@@ -71,6 +72,7 @@ app.add_middleware(
 app.include_router(health_router, prefix="/health", tags=["health"])
 app.include_router(metrics_router, prefix="/metrics", tags=["metrics"])
 app.include_router(router, prefix="/api/v1", tags=["jira"])
+app.include_router(intake_router, prefix="/api/v1", tags=["intake"])
 
 
 if __name__ == "__main__":
